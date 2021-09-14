@@ -7,41 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"myprogs/reflectall/models"
 	"reflect"
 	"sort"
 	"strings"
 )
-
-type String string
-
-func (s *String) UnmarshalJSON(bs []byte) (err error) {
-	buf := string(bs)
-	buf = strings.TrimSpace(buf)
-	switch buf[0] {
-	case '"':
-		buf = buf[1 : len(buf)-1]
-		*s = String(buf)
-	default:
-		*s = String(buf)
-	}
-	return
-}
-
-type Request struct {
-	Merchant       String `json:"merchant,omitempty"`
-	Amount         String `json:"amount,omitempty"`
-	OrderID        String `json:"order_id,omitempty"`
-	Description    String `json:"description,omitempty"`
-	SuccessUrl     String `json:"success_url,omitempty"`
-	UnixTimestamp  String `json:"unix_timestamp,omitempty"`
-	Salt           String `json:"salt,omitempty"`
-	Testing        String `json:"testing,omitempty"`
-	ClientPhone    String `json:"client_phone,omitempty"`
-	ClientEmail    String `json:"client_email,omitempty"`
-	ReceiptContact String `json:"receipt_contact,omitempty"`
-	ReceiptItems   String `json:"receipt_items,omitempty"`
-	CallbackUrl    String `json:"callback_url,omitempty"`
-}
 
 var js = `
 {
@@ -62,45 +32,18 @@ var js = `
 var key = "00112233445566778899aabbccddeeff"
 
 func main() {
-	st := Request{}
-
-	err := json.Unmarshal([]byte(js), &st)
+	//st := Request{}
+	mp := map[string]models.String{}
+	err := json.Unmarshal([]byte(js), &mp)
 	if err != nil {
 		log.Fatalln(err)
 	}
+	fmt.Println(stringToSSH1(key, mapToSortString(mp)))
 
-	t := reflect.TypeOf(st)
-	v := reflect.ValueOf(st)
-	b := []string{}
-	mp := map[string]string{}
-
-	for i := 0; i < t.NumField(); i++ {
-		if len(v.Field(i).String()) == 0 {
-			continue
-		}
-		b = append(b, strings.Split(t.Field(i).Tag.Get("json"), ",")[0])
-		mp[b[i]] = b64.StdEncoding.EncodeToString([]byte(v.Field(i).String()))
-	}
-	bb := bytes.Buffer{}
-	sort.Strings(b)
-	ln := len(b) - 1
-	for i, j := range b {
-		bb.WriteString(j)
-		bb.WriteString("=")
-		bb.WriteString(mp[j])
-		if i != ln {
-			bb.WriteString("&")
-		}
-	}
-	sh := sha1.New()
-	sh1 := sha1.New()
-
-	sh1.Write([]byte(key + bb.String()))
-	sh.Write([]byte(key + fmt.Sprintf("%x", sh1.Sum(nil))))
-	fmt.Printf("%x", sh.Sum(nil))
+	//fmt.Println(stringToSSH1(key, structToSortString(st)))
 }
 
-func structToMapAndSlice(input Request) (output string) {
+func structToSortString(input models.Request) (output string) {
 	t := reflect.TypeOf(input)
 	v := reflect.ValueOf(input)
 	var mp = map[string]string{}
@@ -125,4 +68,49 @@ func structToMapAndSlice(input Request) (output string) {
 	}
 	output = bb.String()
 	return
+}
+
+func mapToSortString(input map[string]models.String) (output string) {
+	//printMap(input)
+	sl := []string{}
+	mp := map[string]string{}
+	for i, j := range input {
+		if i == `signature` || len(j) == 0 {
+			continue
+		}
+		i = strings.ToLower(i)
+		sl = append(sl, i)
+		mp[i] = b64.StdEncoding.EncodeToString([]byte(j))
+	}
+	sort.Strings(sl)
+	bb := bytes.Buffer{}
+	ln := len(sl) - 1
+	for i, j := range sl {
+		bb.WriteString(j)
+		bb.WriteString("=")
+		bb.WriteString(mp[j])
+		if i != ln {
+			bb.WriteString("&")
+		}
+	}
+	output = bb.String()
+	return
+}
+
+func stringToSSH1(key, input string) (signature string) {
+	sh := sha1.New()
+	sh1 := sha1.New()
+	sh1.Write([]byte(key + input))
+	sh.Write([]byte(key + fmt.Sprintf("%x", sh1.Sum(nil))))
+	signature = fmt.Sprintf("%x", sh.Sum(nil))
+	return
+}
+
+func printMap(input map[string]models.String) {
+	for i, j := range input {
+		if len(j) == 0 {
+			continue
+		}
+		fmt.Println(i, j)
+	}
 }
